@@ -47,7 +47,7 @@ jobs:
         run: |
           npm ci
           npm run build:ui
-          cd dist/ui && zip -r9 ../../mira-firmware/ui.zip .
+          cd dist/ui && zip -r9 ../../../mira-firmware/ui.zip .
 
       - name: empty placeholders for the Docker context
         working-directory: mira-firmware
