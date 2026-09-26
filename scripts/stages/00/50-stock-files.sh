@@ -1,6 +1,7 @@
 #!/bin/sh
 
-rsync -aAXv "$RES_PATH"/stock-files/output/ "$ROOTFS_PATH"/
+# cp, not rsync: the builder image's rsync needs libacl symbol ACL_1.3 and will not start.
+cp -a "$RES_PATH"/stock-files/output/. "$ROOTFS_PATH"/
 
 ln -sf libweston-3.so.0.0.0 "$ROOTFS_PATH"/usr/lib/libweston-3.so.0
 ln -sf libwayland-server.so.0.1.0 "$ROOTFS_PATH"/usr/lib/libwayland-server.so.0
