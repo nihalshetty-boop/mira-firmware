@@ -1,24 +1,11 @@
-# Build the go-librespot armv6 binary and the UI dist zip,
-# then drop both into this firmware tree where build.sh expects them.
+# Pack the sibling MacThing UI into ui.zip. This image does not build Spotify or voice.
 prepare:
     @echo ">> building ${IMAGE_VERSION:-$(grep -m1 'IMAGE_VERSION:=' build.sh | sed 's/.*:="\(.*\)"}"*/\1/')}   (set in build.sh, or override with IMAGE_VERSION=vX.Y.Z just docker-run)"
-    cd ../mira-daemon && ./crosscompile.sh armv6
-    cp ../mira-daemon/go-librespot-armv6 ./go-librespot-armv6
-    cp ../mira-daemon/config.yml ./go-librespot-config.yml
-    -[ -f ../mira-daemon/.report-key ] && sed -i "s|mira-reports.mira-thing.workers.dev/\"|mira-reports.mira-thing.workers.dev/?k=$(cat ../mira-daemon/.report-key)\"|" ./go-librespot-config.yml
-    rm -f ./iap2-sidecar-armv7
-    -cd ../mira-daemon && ./iap2/build.sh || echo ">> iap2 sidecar skipped (no rust toolchain?) - building WITHOUT iPhone volume"
-    -cp ../mira-daemon/iap2/iap2-sidecar-armv7 ./iap2-sidecar-armv7 2>/dev/null || true
-    # primary lyrics provider secrets (Musixmatch). gitignored; empty if absent
-    # (public builders without it just fall back to lrclib)
-    cp ../mira-daemon/.env ./lp.env 2>/dev/null || : > ./lp.env
-    cd ../mira-ui && (command -v bun >/dev/null && bun install || npm install)
-    cd ../mira-ui && (command -v bun >/dev/null && bun run build || npm run build)
+    cd ../MacThing && npm run build:ui
     rm -f ./ui.zip
-    cd ../mira-ui/dist && zip -r9 {{justfile_directory()}}/ui.zip .
-    # Voice bundle
+    cd ../MacThing/dist/ui && zip -r9 {{justfile_directory()}}/ui.zip .
+    : > ./lp.env
     mkdir -p ./voice-artifacts
-    [ "${BUNDLE_VOICE:-1}" = "0" ] || bash ./scripts/get-voice-artifacts.sh ./voice-artifacts
 
 run: prepare
     sudo ./build.sh
@@ -34,5 +21,6 @@ docker-build: prepare
 
 docker-run: docker-build
     # IMAGE_VERSION must be forwarded or the override silently does nothing and
-    # the image ships the internal v1.4.x counter instead of the release name
-    docker run --rm --privileged -e BUNDLE_VOICE -e IMAGE_VERSION -v ./output:/work/output firmware-builder:latest
+    # the image ships the internal version counter instead of the release name.
+    # BUNDLE_VOICE defaults off so an empty voice-artifacts directory is not installed.
+    docker run --rm --privileged -e BUNDLE_VOICE="${BUNDLE_VOICE:-0}" -e IMAGE_VERSION -v ./output:/work/output firmware-builder:latest

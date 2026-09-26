@@ -1,99 +1,68 @@
-# Mira firmware
+# Car Thing firmware
 
-Mira firmware builder for the Spotify Car Thing.
+This fork builds a Car Thing image that shows the [MacThing](https://github.com/srcurran/MacThing) page instead of Mira's Spotify screens. The clock is on whenever the device has power. A missing Mac is a normal state, not a failure. Weather that is stored on the device, and a Mac bridge that can reach this image, are not in this build. This image does not start the Spotify daemon and has no `adb`.
 
-Part of [Mira](https://github.com/mira-thing)
+The two git repos stay separate. This repo is the image builder. MacThing is the UI, cloned beside it. The build checks out both, zips MacThing's `dist/ui`, and serves that zip at `http://localhost:80`.
 
-## Support
+## Credit
 
-Mira is free and open source. If you'd like to support development, you can do so on [GitHub Sponsors](https://github.com/sponsors/MustakimK) or [Ko-fi](https://ko-fi.com/MustakimK). Sponsors get early access to betas and access to the dev chat, both set up through [Discord](https://discord.gg/SR2Pne7EPM). Every bit genuinely helps and it's what makes this sustainable to keep working on.
+- [Mira](https://github.com/mira-thing) by [MustakimK](https://github.com/MustakimK). This builder is a fork of [mira-firmware](https://github.com/mira-thing/mira-firmware), Apache 2.0. It keeps that license and the image's clock, display, USB, and Bluetooth chip services, and it leaves out Mira's Spotify daemon, UI, and voice stack.
+- [Sean Curran](https://github.com/srcurran), author of [MacThing](https://github.com/srcurran/MacThing), MIT. The page in the image is that project, including this fork's clock change.
+- Earlier builder and kernel credits are in [Attributions](#attributions) below.
 
-## Flashing
+## Flash a release
 
-Prebuilt images and step-by-step flashing instructions live in [mira-releases](https://github.com/mira-thing/mira-releases).
+Each successful run of the Image build action publishes a GitHub Release on this repo. The attached file is `mira_firmware_v1.1.0.zip`. Push MacThing first if the release should include a new page, then push this repo or run the workflow by hand. A push to MacThing alone does not start the image build.
 
-## Building
+Flash with [Terbium](https://terbium.app/) in a Chromium browser such as Chrome. Flashing wipes the Car Thing. On a Mac, do not install Terbium's Windows driver. Bricking is unlikely. Holding buttons 1 and 4 while plugging in USB puts the device back in flash mode.
 
-You will need the following as:
+1. Hold buttons **1** and **4** while you plug in a data USB-C cable. A black screen means it is ready.
+2. Open [terbium.app](https://terbium.app/) and follow it until the firmware step.
+3. Choose **Local archive**, not **Mira**. The Mira choice is [Mira's Spotify release](https://github.com/mira-thing/mira-releases). Select `mira_firmware_v1.1.0.zip`. Do not unzip it.
+4. Wait about 5–10 minutes. If the progress bar stalls, start again from step 1.
+5. When Terbium finishes, unplug the cable and plug it back in.
 
-related repos in the same parent directory:
+First boot should be the MacThing clock, not a Spotify sign-in. The time can be wrong until the device has reached a network once, because that is when `clock_sync` sets the clock.
 
-```
-git clone https://github.com/mira-thing/mira-daemon
-git clone https://github.com/mira-thing/mira-ui
-git clone https://github.com/mira-thing/mira-voice     # skip with BUNDLE_VOICE=0
-git clone https://github.com/mira-thing/mira-firmware
-```
+## Build the image yourself
 
-Toolchains
-- Go
-- `bun` or `npm`
-- `huggingface-cli` or `git-lfs`
-- Rust + `rustup target add armv7-unknown-linux-musleabihf`
+Keep the repos as siblings. The UI directory must be named `MacThing`:
 
-Image tools You also need `curl`, `zip`/`unzip`, `genimage`, `m4`, `xbps-install`, `mkpasswd`, and `patchelf`. `xbps-install` can be installed on any distro from the [Void Linux static binaries](https://docs.voidlinux.org/xbps/troubleshooting/static.html).
-
-> Don't blindly extract `xbps-static` to your rootfs, pin the destination. The following has worked:
->
-> ```
-> sudo tar --no-overwrite-dir --no-same-owner --no-same-permissions -xvf xbps-static-latest.x86_64-musl.tar.xz -C /
-> ```
-
-On non-arm64 hosts, install `qemu-user-static` (with binfmt registered), or run once:
-
-```
-docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+```bash
+git clone https://github.com/srcurran/MacThing.git MacThing
+git clone https://github.com/mira-thing/mira-firmware.git
 ```
 
-Then:
+Use your own forks if that is where the clock change and this builder live. On a Mac, Docker has to be running and `just` installed (`brew install just`). Do not use `just run` here. That path expects Void Linux tools on the host.
 
-```
-just run
-```
-
-Outputs land in `output/`. Or use Docker:
-
-```
+```bash
+cd mira-firmware
 just docker-run
 ```
 
-Don't run these under `sudo`. `sudo` resets `PATH`, so tools installed in your home directory (`cargo`, `rustup`, `bun`) disappear and the build fails with "command not found". If Docker needs root on your machine, add yourself to the `docker` group instead:
+That builds the MacThing page, zips `dist/ui` to `ui.zip`, and writes `output/mira_firmware_v1.1.0.zip`. The first run downloads the Thing Labs base system inside the container and takes a long time. Flash that zip with the Terbium steps above.
 
-```
-sudo usermod -aG docker $USER && newgrp docker
-```
-
-To build without the on-device voice stack (no HuggingFace download, much smaller):
-
-```
-BUNDLE_VOICE=0 just docker-run
-```
-
-## Related projects
-
-- [`mira-ui`](https://github.com/mira-thing/mira-ui) - Vite + React UI
-- [`mira-daemon`](https://github.com/mira-thing/mira-daemon) - daemon
-- [`mira-voice`](https://github.com/mira-thing/mira-voice) - on-device voice stack
-- [`mira-releases`](https://github.com/mira-thing/mira-releases) - prebuilt firmware images
-- [`mira-firmware`](.) - image builder (this repo)
+`BUNDLE_VOICE` defaults to `0`. The Spotify binary is installed only if `go-librespot-armv6` and `go-librespot-config.yml` are already in this directory. This fork's `just prepare` does not produce them.
 
 ## Attributions
 
-This firmware builder was forked from [usenocturne/nocturne](https://github.com/usenocturne/nocturne) - credit to Brandon Saldan, shadow, Dominic Frye, and bbaovanc for the original work it builds on
+This firmware builder was forked from [mira-thing/mira-firmware](https://github.com/mira-thing/mira-firmware), which was forked from [usenocturne/nocturne](https://github.com/usenocturne/nocturne). Credit to Brandon Saldan, shadow, Dominic Frye, and bbaovanc for the Nocturne builder.
 
-Their builder was itself based on:
+That builder was itself based on:
 
 - [raspi-alpine/builder](https://gitlab.com/raspi-alpine/builder) by Benjamin Böhmke and Duncan Bellamy
 - [JoeyEamigh/nixos-superbird](https://github.com/JoeyEamigh/nixos-superbird)
 - [bishopdynamics' superbird-tool](https://github.com/bishopdynamics/superbird-tool) and modified [aml-imgpack](https://github.com/bishopdynamics/aml-imgpack)
 - [Thing Labs' superbird-tool fork](https://github.com/thinglabsoss/superbird-tool)
 
-The bundled kernel (`resources/kernel/boot_custom.dump`) is a patched fork of Thing Labs'/spsgsb [kernel-common](https://github.com/thinglabsoss).
+The bundled kernel (`resources/kernel/boot_custom.dump`) is a patched fork of Thing Labs' / spsgsb [kernel-common](https://github.com/thinglabsoss).
 
 ## License
 
 This firmware builder is **Apache 2.0**.
 
-The bundled kernel image is **GPL-2.0** (Linux), a patched fork of Thing Labs'/spsgsb kernel-common. The complete corresponding source is available to any third party on request for at least three years from distribution; open an issue on this repo or ask on [Discord](https://discord.gg/SR2Pne7EPM).
+The MacThing page packed into the image is **MIT**, copyright Sean Curran. See that repo's `LICENSE`.
+
+The bundled kernel image is **GPL-2.0** (Linux), a patched fork of Thing Labs' / spsgsb kernel-common. The complete corresponding source is available to any third party on request for at least three years from distribution of an image that contains that kernel.
 
 > "Spotify" and "Car Thing" are trademarks of Spotify AB. This software is not affiliated with or endorsed by Spotify AB.

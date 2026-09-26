@@ -7,15 +7,9 @@ on:
     types: [upstream-push]
   workflow_dispatch:
     inputs:
-      daemon_ref:
-        description: mira-daemon ref to build
-        default: main
       ui_ref:
-        description: mira-ui ref to build
+        description: MacThing ref to build
         default: main
-      bundle_voice:
-        description: bundle voice artifacts (1/0)
-        default: "1"
 
 concurrency:
   group: image-build
@@ -25,8 +19,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
     env:
-      BUNDLE_VOICE: ${{ github.event.inputs.bundle_voice || '1' }}
+      BUNDLE_VOICE: "0"
     steps:
       - name: log trigger
         if: github.event_name == 'repository_dispatch'
@@ -37,76 +33,27 @@ jobs:
           path: mira-firmware
       - uses: actions/checkout@v7
         with:
-          repository: mira-thing/mira-daemon
-          ref: ${{ github.event.inputs.daemon_ref || 'main' }}
-          path: mira-daemon
-      - uses: actions/checkout@v7
-        with:
-          repository: mira-thing/mira-ui
+          repository: ${{ github.repository_owner }}/MacThing
           ref: ${{ github.event.inputs.ui_ref || 'main' }}
-          path: mira-ui
-      - uses: actions/checkout@v7
-        with:
-          repository: mira-thing/mira-voice
-          path: mira-voice
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: mira-daemon/go.mod
-          cache-dependency-path: mira-daemon/go.sum
-      - name: build daemon
-        working-directory: mira-daemon
-        run: |
-          ./crosscompile.sh armv6
-          cp go-librespot-armv6 ../mira-firmware/
-          cp config.yml ../mira-firmware/go-librespot-config.yml
-
-      - name: build iap2 sidecar (armv7)
-        working-directory: mira-daemon
-        run: |
-          rustup target add armv7-unknown-linux-musleabihf
-          ./iap2/build.sh
-          cp iap2/iap2-sidecar-armv7 ../mira-firmware/
-
-      - name: inject report submit key
-        working-directory: mira-firmware
-        env:
-          KEY: ${{ secrets.REPORT_SUBMIT_KEY }}
-        run: |
-          if [ -n "$KEY" ]; then
-            sed -i "s|mira-reports.mira-thing.workers.dev/\"|mira-reports.mira-thing.workers.dev/?k=$KEY\"|" go-librespot-config.yml
-            echo "report key injected"
-          else
-            echo "no REPORT_SUBMIT_KEY secret - keyless build"
-          fi
+          path: MacThing
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
-          cache-dependency-path: mira-ui/package-lock.json
+          cache-dependency-path: MacThing/package-lock.json
       - name: build ui
-        working-directory: mira-ui
+        working-directory: MacThing
         run: |
           npm ci
-          npm run build
-          cd dist && zip -r9 ../../mira-firmware/ui.zip .
+          npm run build:ui
+          cd dist/ui && zip -r9 ../../mira-firmware/ui.zip .
 
-      - name: lyrics provider env (empty - lrclib fallback)
-        working-directory: mira-firmware
-        run: ': > lp.env'
-
-      - name: cache voice artifacts
-        if: env.BUNDLE_VOICE != '0'
-        uses: actions/cache@v6
-        with:
-          path: mira-firmware/voice-artifacts
-          key: voice-artifacts-${{ hashFiles('mira-voice/fetch-artifacts.sh') }}
-      - name: fetch voice artifacts
+      - name: empty placeholders for the Docker context
         working-directory: mira-firmware
         run: |
+          : > lp.env
           mkdir -p voice-artifacts
-          [ "$BUNDLE_VOICE" = "0" ] || VOICE_REPO=../mira-voice bash ./scripts/get-voice-artifacts.sh ./voice-artifacts
 
       - name: register qemu binfmt
         run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
@@ -127,3 +74,15 @@ jobs:
           path: mira-firmware/output/*.zip
           retention-days: 14
           if-no-files-found: error
+
+      - name: publish release
+        working-directory: mira-firmware
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="image-${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          notes="$(printf 'Built from `%s`.\n\n```\n%s\n```\n' "$GITHUB_SHA" "$(sha256sum output/*.zip)")"
+          gh release create "$tag" output/*.zip \
+            --title "Car Thing image ${GITHUB_RUN_NUMBER}" \
+            --notes "$notes" \
+            --target "$GITHUB_SHA"
