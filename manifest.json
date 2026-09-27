@@ -1,7 +1,7 @@
 {
   "$schema": "https://terbium.app/schemas/manifest/v1.json",
   "manifest_version": 1,
-  "updated_at": "2026-09-27T02:09:01Z",
+  "updated_at": "2026-09-27T03:01:49Z",
   "project": {
     "id": "carthing-macthing",
     "name": "Car Thing clock",
@@ -23,8 +23,9 @@
       "description": "Image builds from GitHub Actions.",
       "stability": "stable",
       "default": true,
-      "latest": "image-6.1",
+      "latest": "image-7.1",
       "releases": [
+        "image-7.1",
         "image-6.1",
         "image-5.1"
       ]
@@ -59,6 +60,21 @@
         "url": "https://github.com/nihalshetty-boop/mira-firmware/releases/download/image-6.1/mira_firmware_v1.1.0.zip",
         "size": 334649127,
         "sha256": "0cc3905f974aa789a7bde657548354cacf73e106e86648cd3ef65d352ae04f37"
+      }
+    },
+    "image-7.1": {
+      "version": "image-7.1",
+      "channel": "stable",
+      "released_at": "2026-09-27T03:01:49Z",
+      "summary": "MacThing page, no Spotify daemon.",
+      "changelog": "Built from f3b699dbd71348e9fb11350226460e2a47516ebf.",
+      "changelog_url": "https://github.com/nihalshetty-boop/mira-firmware/releases/tag/image-7.1",
+      "yanked": null,
+      "deprecated": false,
+      "download": {
+        "url": "https://github.com/nihalshetty-boop/mira-firmware/releases/download/image-7.1/mira_firmware_v1.1.0.zip",
+        "size": 334641131,
+        "sha256": "ab32e24c192abe8efa4931e0fc69c3521d20c84fb744ec41c47c1ebd858fcb3f"
       }
     }
   }
