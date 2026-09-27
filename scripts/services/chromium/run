@@ -29,4 +29,10 @@ ls -1t "$BREAKPAD_DUMP_LOCATION"/*.dmp 2>/dev/null | tail -n +4 | while read -r 
   rm -f "$f"
 done
 
+# This Chromium ignores --remote-debugging-address and stays on 127.0.0.1:2222.
+# Accept the same port from the USB gadget and hand it to that local socket.
+sysctl -w net.ipv4.conf.all.route_localnet=1 >/dev/null 2>&1 || true
+iptables -t nat -C PREROUTING -p tcp --dport 2222 -j DNAT --to-destination 127.0.0.1:2222 >/dev/null 2>&1 || \
+  iptables -t nat -A PREROUTING -p tcp --dport 2222 -j DNAT --to-destination 127.0.0.1:2222 || true
+
 exec /usr/bin/chromium-browser/chrome --no-sandbox --in-process-gpu --remote-debugging-address=0.0.0.0 --remote-debugging-port=2222 --user-data-dir=/var/cache/chrome_storage --disk-cache-size=52428800 --kiosk --disable-pinch --allow-file-access-from-files --ignore-certificate-errors --enable-experimental-web-platform-features --default-background-color=ff121212 --app=http://localhost:80

@@ -3,6 +3,8 @@ name: Image build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - manifest.json
   repository_dispatch:
     types: [upstream-push]
   workflow_dispatch:
@@ -86,3 +88,10 @@ jobs:
             --title "Car Thing image ${GITHUB_RUN_NUMBER}" \
             --notes "$notes" \
             --target "$GITHUB_SHA"
+          python3 scripts/update-manifest.py "$tag"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Point the Terbium manifest at ${tag}"
+          git push
