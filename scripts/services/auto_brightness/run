@@ -7,41 +7,97 @@
 # the UI settings change (the daemon also restarts this service so we can go back to auto brightness)
 #
 # Backlight raw scale is inverted (1 brightest, 254 dim (w flicker), 0 and 255 off)
+#
+# The MacThing page asks for a night level over 127.0.0.1:4750 (/dim and /full). That writes
+# /tmp/carthing-level, which this loop honors whether the Mac still has a shell or not.
 
 exec 2>&1
 sv check weston > /dev/null || exit 1
 
 CONF=/var/local/etc/backlight.conf
-AUTO=1 BRIGHTNESS=8
-[ -r "$CONF" ] && . "$CONF" 2> /dev/null
+LEVEL=/tmp/carthing-level
+PORT=4750
+DIM=200
+ALS=""
+LISTEN=""
 
-if [ "$AUTO" != "0" ]; then
-  # stock behavior
-  exec /usr/bin/sp-als-backlight > /dev/null 2>&1
-fi
+bl_node() {
+  for f in /sys/class/backlight/*/brightness; do
+    [ -e "$f" ] && echo "$f" && return 0
+  done
+  return 1
+}
 
-# manual override
-BL=""
-for f in /sys/class/backlight/*/brightness; do
-  [ -e "$f" ] && BL="$f" && break
-done
-[ -n "$BL" ] || { echo "auto_brightness: no backlight node, exiting"; exit 1; }
+write_raw() {
+  node=$(bl_node) || return 0
+  echo "$1" > "$node" 2>/dev/null
+}
+
+stop_als() {
+  [ -n "$ALS" ] || return 0
+  kill "$ALS" 2>/dev/null
+  wait "$ALS" 2>/dev/null
+  ALS=""
+}
+
+start_als() {
+  [ -x /usr/bin/sp-als-backlight ] || return 0
+  [ -n "$ALS" ] && kill -0 "$ALS" 2>/dev/null && return 0
+  /usr/bin/sp-als-backlight >/dev/null 2>&1 &
+  ALS=$!
+}
+
+# Slider path from backlight.conf: perceptual level 1–10, same curve as before.
+write_slider() {
+  raw=$(awk -v b="$1" '
+    function clamp(x, lo, hi) { return x < lo ? lo : (x > hi ? hi : x) }
+    BEGIN {
+      pmin = exp(log(0.005) / 2.5)
+      p = pmin + (1 - pmin) * (clamp(b, 1, 10) - 1) / 9
+      light = exp(2.5 * log(p))
+      printf "%d\n", clamp(1 + (1 - light) * 244, 1, 255)
+    }')
+  write_raw "$raw"
+}
+
+listen() {
+  command -v nc >/dev/null 2>&1 || { echo "auto_brightness: no nc; night level only via $LEVEL"; return; }
+  # Drop anyone who isn't the page on this device. The USB gadget shares a network.
+  iptables -C INPUT -p tcp --dport "$PORT" ! -s 127.0.0.1 -j DROP 2>/dev/null || \
+    iptables -I INPUT -p tcp --dport "$PORT" ! -s 127.0.0.1 -j DROP 2>/dev/null || true
+  while :; do
+    req=$(printf 'HTTP/1.0 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n' | nc -l -p "$PORT" 2>/dev/null) || req=""
+    [ -n "$req" ] || { sleep 1; continue; }
+    case "$req" in
+      *'/dim'*) echo dim > "$LEVEL" ;;
+      *'/full'*) echo full > "$LEVEL" ;;
+    esac
+  done
+}
+
+cleanup() {
+  [ -n "$LISTEN" ] && kill "$LISTEN" 2>/dev/null
+  stop_als
+  exit 0
+}
+trap cleanup INT TERM
+
+echo full > "$LEVEL"
+listen &
+LISTEN=$!
 
 while :; do
   AUTO=1 BRIGHTNESS=8
-  [ -r "$CONF" ] && . "$CONF" 2> /dev/null
-  # runit restarts us into the stock branch
-  [ "$AUTO" != "0" ] && exit 0
-
-  # re-applied every tick so the level survives suspend/resume
-  awk -v b="$BRIGHTNESS" '
-    function clamp(x, lo, hi) { return x < lo ? lo : (x > hi ? hi : x) }
-    BEGIN {
-      pmin = exp(log(0.005) / 2.5)              # 0.5% luminance at slider 1
-      p = pmin + (1 - pmin) * (clamp(b, 1, 10) - 1) / 9
-      light = exp(2.5 * log(p))                 # Stevens-ish power law
-      printf "%d\n", clamp(1 + (1 - light) * 244, 1, 255)
-    }' > "$BL" 2> /dev/null
-
-  sleep 2
+  [ -r "$CONF" ] && . "$CONF" 2>/dev/null
+  read -r want < "$LEVEL" 2>/dev/null || want=full
+  if [ "$want" = dim ]; then
+    stop_als
+    write_raw "$DIM"
+  elif [ "$AUTO" = "0" ]; then
+    stop_als
+    write_slider "$BRIGHTNESS"
+  else
+    start_als
+  fi
+  sleep 1
 done

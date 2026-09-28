@@ -1,6 +1,6 @@
 # Car Thing firmware
 
-This fork builds a Car Thing image that shows the [MacThing](https://github.com/srcurran/MacThing) page instead of Mira's Spotify screens. The clock is on whenever the device has power. A missing Mac is a normal state, not a failure. Weather that is stored on the device, and a Mac bridge that can reach this image, are not in this build. This image does not start the Spotify daemon and has no `adb`.
+This fork builds a Car Thing image that shows the [MacThing](https://github.com/srcurran/MacThing) page instead of Mira's Spotify screens. The clock is on whenever the device has power. A missing Mac is a normal state, not a failure: the page keeps the last forecast and the day's events. The Mac bridge reaches Chromium's debug port over USB. This image does not start the Spotify daemon and has no `adb`. After a minute with no input, or when the Mac display sleeps, the page asks `auto_brightness` on the device to drop the backlight. That does not need a shell.
 
 The two git repos stay separate. This repo is the image builder. MacThing is the UI, cloned beside it. The build checks out both, zips MacThing's `dist/ui`, and serves that zip at `http://localhost:80`.
 
